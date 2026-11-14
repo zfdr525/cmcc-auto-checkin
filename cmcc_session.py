@@ -305,7 +305,7 @@ def refresh(profile: dict, timeout: int = 25, config_path: str = "") -> dict:
 
     返回 {ok, retCode, validityTerm, cookie} 或 {ok:False, reason, retCode, dead}。
     """
-    url = profile["url"]
+    url = profile.get("url", "https://client.app.coc.10086.cn/biz-orange/LN/uamonekeylogin/autoLogin")
     # 明文必须与 xs 用同一份字符串，故统一从这里重建
     plain = json.dumps(profile["template"], separators=(",", ":"), ensure_ascii=False)
     # 抓包时若 App 尚未持有会话，profile 里 cookie 为空；autoLogin 不校验来者会话，
