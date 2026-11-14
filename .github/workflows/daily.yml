@@ -2,21 +2,19 @@ name: CMCC Daily Checkin
 
 on:
   schedule:
-    # 北京时间 08:10 (UTC 00:10)
-    - cron: '10 0 * * *'
-    # 北京时间 20:10 (UTC 12:10)
-    - cron: '10 12 * * *'
-  workflow_dispatch: # 允许手动触发
+    - cron: '10 0 * * *'   # 每天 UTC 0:10，即北京时间 8:10
+    - cron: '10 12 * * *'  # 每天 UTC 12:10，即北京时间 20:10
+  workflow_dispatch:       # 允许手动触发
 
 jobs:
   checkin:
     runs-on: ubuntu-latest
     steps:
       - name: 检出代码
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: 设置 Python 环境
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
@@ -25,26 +23,35 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 生成临时配置 (供脚本读取)
+      - name: 修复 Python 3.10 的 SSL 兼容性
+        run: |
+          # 强行替换常量，防止报 AttributeError
+          sed -i 's/ssl.OP_LEGACY_SERVER_CONNECT/0x4/g' cmcc_session.py
+
+      - name: 生成临时配置
         env:
-          CMCC_PHONE: ${{ secrets.CMCC_PHONE }}
           CMCC_APP_TOKEN: ${{ secrets.CMCC_APP_TOKEN }}
           CMCC_SESSION_TEMPLATE: ${{ secrets.CMCC_SESSION_TEMPLATE }}
         run: |
-          # 如果脚本支持环境变量，这步可忽略；为了保险，我们直接写一份 config.json
-          cat <<EOF > config.json
-          {
-            "phone": "$CMCC_PHONE",
-            "app_token": "$CMCC_APP_TOKEN",
-            "session_template": $CMCC_SESSION_TEMPLATE
+          python -c "
+          import json, os
+          token = os.environ.get('CMCC_APP_TOKEN', '')
+          tpl_str = os.environ.get('CMCC_SESSION_TEMPLATE', '{}')
+          try:
+              tpl = json.loads(tpl_str)
+          except:
+              tpl = {}
+              
+          config = {
+              'app_token': token,
+              'session_template': tpl,
+              'phone': '' # 你的脚本可能需要手机号，这里留空看逻辑
           }
-          EOF
+          with open('config.json', 'w') as f:
+              json.dump(config, f)
+          "
 
-      - name: 现签 Session
-        run: |
-          # 如果文件存在说明模板有效，尝试现签
-          python3 cmcc_session.py --refresh --config config.json || echo "现签失败，尝试使用旧 Token"
-          
       - name: 执行签到
         run: |
+          # 直接跑主脚本，遇到过期会自动尝试现签
           python3 cmcc_sign.py --tasks --config config.json
