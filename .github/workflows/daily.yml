@@ -27,30 +27,19 @@ jobs:
           sed -i 's/ssl.OP_LEGACY_SERVER_CONNECT/0x4/g' cmcc_session.py
           sed -i 's/ssl.OP_LEGACY_SERVER_CONNECT/0x4/g' cmcc_sign.py
 
-      - name: 一键现签与签到
+      - name: 极速现签与签到
         env:
           CMCC_APP_TOKEN: ${{ secrets.CMCC_APP_TOKEN }}
           CMCC_SESSION_TEMPLATE: ${{ secrets.CMCC_SESSION_TEMPLATE }}
           CMCC_PHONE: ${{ secrets.CMCC_PHONE }}
         run: |
+          # 1. 写入基础配置
           echo "{\"phone\": \"$CMCC_PHONE\", \"app_token\": \"$CMCC_APP_TOKEN\"}" > config.json
-          echo "$CMCC_SESSION_TEMPLATE" > template.json
           
-          python3 -c "
-import json
-import os
-import pathlib
+          # 2. 用纯 Bash 拼接出完美的 profile JSON（解决 KeyError）
+          # 注意这里把模板作为 template 字段，把 xk 硬编码为空字符串，避免解析报错
+          echo "{\"url\": \"https://client.app.coc.10086.cn/biz-orange/LN/uamonekeylogin/autoLogin\", \"cookie\": \"\", \"template\": $CMCC_SESSION_TEMPLATE, \"xk\": \"\", \"phone\": \"$CMCC_PHONE\"}" > .cmcc_session_2899.json
 
-phone = os.environ.get('CMCC_PHONE', '')
-tpl = json.load(open('template.json'))
-profile = {
-    'url': 'https://client.app.coc.10086.cn/biz-orange/LN/uamonekeylogin/autoLogin',
-    'cookie': '',
-    'template': tpl,
-    'xk': tpl.get('xk', ''),
-    'phone': phone
-}
-pathlib.Path('.cmcc_session_' + phone[-4:] + '.json').write_text(json.dumps(profile))
-"
+          # 3. 执行现签和签到
           python3 cmcc_session.py --refresh --config config.json
           python3 cmcc_sign.py --tasks --config config.json
